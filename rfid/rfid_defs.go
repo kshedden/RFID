@@ -7,16 +7,18 @@ import (
 	"time"
 )
 
+// Integer codes for the two possible person types
 type PersonType uint8
 
-type RoomCode uint8
-
-// Codes for the two possible person types
 const (
 	Provider PersonType = iota
 	Patient
 )
 
+// Integer codes for the rooms.
+type RoomCode uint8
+
+// These need to start at zero because they are used as array indices.
 const (
 	Exam1 RoomCode = iota
 	Exam2
@@ -44,10 +46,12 @@ const (
 	Treatment
 	NoSignal
 	CheckoutReturn // In HMM but no IP for this room
-	Null           // Must be last, used to mark absent Room2
+	Null           // Must be last, used to mark absent information for Room2
 )
 
 var (
+
+	// IPcode maps IP addresses to integer room codes.
 	IPcode = map[string]RoomCode{
 		"10.23.69.140":   Exam1,
 		"10.23.69.141":   Exam2,
@@ -77,7 +81,7 @@ var (
 		"CheckoutReturn": CheckoutReturn,
 	}
 
-	// Map from IP address to room name.
+	// IPmap maps IP address to room names.
 	IPmap = map[string]string{
 		"10.23.69.140":   "Exam1",
 		"10.23.69.141":   "Exam2",
@@ -107,11 +111,13 @@ var (
 		"CheckoutReturn": "CheckoutReturn",
 	}
 
+	// PTmap maps person category codes to text labels.
 	PTmap = map[PersonType]string{
 		Provider: "Provider",
 		Patient:  "Patient",
 	}
 
+	// Provmap maps provider category codes to text labels.
 	ProvMap = map[ProviderType]string{
 		Attending:     "Attending",
 		Fellow:        "Fellow",
@@ -126,6 +132,7 @@ var (
 	}
 )
 
+// Provider type is an integer code for a category of provider.
 type ProviderType int
 
 // Codes for the different provider types
@@ -142,6 +149,7 @@ const (
 	Other                      = 99
 )
 
+// RFIDrecord holds a raw RFID record.
 type RFIDrecord struct {
 
 	// Unique id
@@ -184,6 +192,7 @@ type RFIDrecord struct {
 	Clarity *ClarityRecord
 }
 
+// parsePatient parses a patient record from the input format into a struct.
 func (rec *RFIDrecord) parsePatient(tag string, rfi *RFIDinfo) bool {
 
 	fld := strings.Split(tag, "F")
@@ -259,6 +268,7 @@ func parseMil(mil string) (time.Time, bool) {
 	return time.Date(year, time.Month(month), day, hour, min, 0, 0, time.UTC), true
 }
 
+// parseProvider parses a provider tag from the input form into a struct.
 func (rec *RFIDrecord) parseProvider(tag string, rfi *RFIDinfo) bool {
 
 	fld := strings.Split(tag, "F")

@@ -1,3 +1,7 @@
+/*
+smooth_locs takes the raw unsmoothed location data and uses an HMM to smooth it.
+*/
+
 package main
 
 import (
@@ -21,10 +25,11 @@ var (
 	// The emission probabilities
 	emis [][]float64
 
-	// Map from location codes to the name of the location
+	// PIx maps location codes to text location labels.
 	IPx map[int]string
 )
 
+// readLocs reads all the unsmoothed location records.
 func readlocs() []*rfid.Location {
 
 	fid, err := os.Open("locations.gob.gz")
@@ -84,6 +89,7 @@ func normalize(mat [][]float64) {
 	}
 }
 
+// makeTrans constructs the probability transition matrix for the HMM.
 func makeTrans() [][]float64 {
 
 	p := len(rfid.IPcode)
@@ -142,6 +148,7 @@ func alloc(m, n int) [][]float64 {
 	return mat
 }
 
+// makeEmission constucts the emissin probabiity matrix for the HMM.
 func makeEmission() [][]float64 {
 
 	p := len(IPx)
@@ -240,6 +247,7 @@ func continuize(locs []*rfid.Location) []*rfid.Location {
 	return locx
 }
 
+// process uses the HMM to smooth locations for one tag/CSN for one day.
 func process(locs []*rfid.Location) []*rfid.Location {
 
 	locs = continuize(locs)
@@ -298,6 +306,7 @@ func run(locs []*rfid.Location) []*rfid.Location {
 	return rlocs
 }
 
+// save stores the smoothed locations to a gob file.
 func save(locs []*rfid.Location) {
 
 	f, err := os.Create("locations_s.gob.gz")

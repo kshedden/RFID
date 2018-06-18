@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	// Aggregate the signals over this time window.
 	twindow time.Duration = 1 * time.Minute
 )
 
@@ -48,6 +49,7 @@ func GetLocation(recs []*RFIDrecord) []*Location {
 
 	var alocs []*Location
 
+	// Process each minute as a chunk.
 	for ii := 0; ii < len(recs); {
 
 		t0 := recs[ii].TimeStamp.Truncate(twindow)
@@ -143,7 +145,7 @@ func processMinute(recs []*RFIDrecord) []*Location {
 			ProviderCat: ctx[tagid].ProviderCat,
 		}
 
-		// If there is a second best match, include it too
+		// If there is a second-best match, include it too
 		if j1 != -1 {
 			loc.IP2 = RoomCode(j1)
 			loc.Signal2 = v[j1]
