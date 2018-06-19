@@ -30,6 +30,9 @@ type HMM struct {
 	// Posterior probabilities
 	PostProb [][]float64
 
+	// The most likely state sequence
+	Pred []int
+
 	// Number of time points
 	nTime int
 
@@ -43,6 +46,17 @@ func alloc(row, col int) [][]float64 {
 	x := make([][]float64, row)
 	for i := 0; i < row; i++ {
 		x[i] = make([]float64, col)
+	}
+
+	return x
+}
+
+// alloci creates a rectangular int array of arrays.
+func alloci(row, col int) [][]int {
+
+	x := make([][]int, row)
+	for i := 0; i < row; i++ {
+		x[i] = make([]int, col)
 	}
 
 	return x
@@ -112,6 +126,56 @@ func (hmm *HMM) getPost() {
 	}
 }
 
+func (hmm *HMM) viterbi() {
+
+	vp := alloc(hmm.nTime, hmm.nState)
+	vl := alloci(hmm.nTime, hmm.nState)
+
+	for j := 0; j < hmm.nState; j++ {
+		vp[0][j] = hmm.start[j] * hmm.emis[j][hmm.data[0]]
+	}
+
+	for t := 1; t < hmm.nTime; t++ {
+		for j := 0; j < hmm.nState; j++ {
+
+			q := vp[t-1][0] * hmm.trans[0][j] * hmm.emis[j][hmm.data[t]]
+			l := 0
+
+			for k := 1; k < hmm.nState; k++ {
+				qq := vp[t-1][k] * hmm.trans[k][j] * hmm.emis[j][hmm.data[t]]
+				if qq > q {
+					q = qq
+					l = k
+				}
+			}
+
+			vp[t][j] = q
+			vl[t][j] = l
+		}
+
+		probnorm(vp[t])
+	}
+
+	hmm.Pred = make([]int, hmm.nTime)
+
+	// Start the backward tracing here
+	l := 0
+	q := vp[hmm.nTime-1][0]
+	for j := 1; j < hmm.nState; j++ {
+		if vp[hmm.nTime-1][j] > q {
+			q = vp[hmm.nTime-1][j]
+			l = j
+		}
+	}
+	hmm.Pred[hmm.nTime-1] = l
+
+	// Trace back to the beginning
+	for t := hmm.nTime - 2; t >= 0; t-- {
+		hmm.Pred[t] = vl[t+1][l]
+		l = hmm.Pred[t]
+	}
+}
+
 // SetEmission sets tbe emission probabilities.
 func (hmm *HMM) SetEmission(emis [][]float64) {
 	hmm.emis = emis
@@ -144,4 +208,5 @@ func (hmm *HMM) Fit() {
 	hmm.forward()
 	hmm.backward()
 	hmm.getPost()
+	hmm.viterbi()
 }

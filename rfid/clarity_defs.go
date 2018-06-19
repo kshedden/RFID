@@ -11,6 +11,9 @@ type ClarityRecord struct {
 	// Time of check-in
 	CheckInTime time.Time
 
+	// Time of check-out
+	CheckOutTime time.Time
+
 	// Provider name
 	ProvName string
 
@@ -22,10 +25,11 @@ type ClarityRecord struct {
 type ClarityFileInfo struct {
 
 	// Column positions
-	CSN         int
-	CheckInTime int
-	ProvName    int
-	VfiOs       int
+	CSN          int
+	CheckInTime  int
+	CheckOutTime int
+	ProvName     int
+	VfiOs        int
 }
 
 // GetClarityFileInfo takes the header of a Clarity file and locates the columns of interest.
@@ -48,6 +52,11 @@ func GetClarityFileInfo(head []string) *ClarityFileInfo {
 	finf.CheckInTime, ok = col["CHECKIN_DTTM"]
 	if !ok {
 		panic("Can't find CHECKIN_DTTM\n")
+	}
+
+	finf.CheckOutTime, ok = col["CHECKOUT_DTTM"]
+	if !ok {
+		panic("Can't find CHECKOUT_DTTM\n")
 	}
 
 	finf.ProvName, ok = col["PROV_NAME_WID"]

@@ -7,18 +7,20 @@ import (
 	"time"
 )
 
-// Integer codes for the two possible person types
+// Type for integer codes for person types.
 type PersonType uint8
 
+// Integer codes for the two possible person types
 const (
 	Provider PersonType = iota
 	Patient
 )
 
-// Integer codes for the rooms.
+// Type for integer codes for the rooms.
 type RoomCode uint8
 
-// These need to start at zero because they are used as array indices.
+// Integer odes for the rooms.  These need to start at zero because they are
+// used as array indices.
 const (
 	Exam1 RoomCode = iota
 	Exam2
@@ -38,7 +40,7 @@ const (
 	Field4
 	Field5
 	IOLMaster
-	Autorefactor
+	Lensometer
 	Admin
 	Checkout
 	IPW9
@@ -50,7 +52,6 @@ const (
 )
 
 var (
-
 	// IPcode maps IP addresses to integer room codes.
 	IPcode = map[string]RoomCode{
 		"10.23.69.140":   Exam1,
@@ -71,7 +72,7 @@ var (
 		"10.23.69.155":   Field4,
 		"10.23.69.156":   Field5,
 		"10.23.69.157":   IOLMaster,
-		"10.23.69.158":   Autorefactor,
+		"10.23.69.158":   Lensometer,
 		"10.23.69.159":   Admin,
 		"10.23.69.160":   Checkout,
 		"10.23.69.161":   IPW9,
@@ -101,7 +102,7 @@ var (
 		"10.23.69.155":   "Field4",
 		"10.23.69.156":   "Field5",
 		"10.23.69.157":   "IOLMaster",
-		"10.23.69.158":   "Autorefactor",
+		"10.23.69.158":   "Lensometer",
 		"10.23.69.159":   "Admin",
 		"10.23.69.160":   "Checkout",
 		"10.23.69.161":   "IPW9",
@@ -192,7 +193,7 @@ type RFIDrecord struct {
 	Clarity *ClarityRecord
 }
 
-// parsePatient parses a patient record from the input format into a struct.
+// parsePatient parses a patient record from its raw input format into a struct.
 func (rec *RFIDrecord) parsePatient(tag string, rfi *RFIDinfo) bool {
 
 	fld := strings.Split(tag, "F")
@@ -413,6 +414,7 @@ type RFIDinfo struct {
 	TimeEarly            int
 	TimeLate             int
 	NoClarity            int
-	BeforeCheckin        int
+	BeforeCheckIn        int
+	AfterCheckOut        int
 	TimeSpanFull         int
 }

@@ -10,7 +10,10 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"time"
+
+	"gonum.org/v1/gonum/floats"
 
 	"github.com/kshedden/rfid/rfid"
 )
@@ -90,47 +93,53 @@ func normalize(mat [][]float64) {
 }
 
 // makeTrans constructs the probability transition matrix for the HMM.
-func makeTrans() [][]float64 {
+func makeTrans(patient bool) [][]float64 {
+
+	if patient {
+		return makeTransPatient()
+	}
+
+	panic("makeTransProvider is not implemented yet\n")
+}
+
+// makeTransPatient constructsthe probability transition matrix for a patient.
+func makeTransPatient() [][]float64 {
 
 	p := len(rfid.IPcode)
 	trans := alloc(p, p)
 
 	for j := 0; j < p; j++ {
 
-		//		exam1 := strings.HasPrefix(IPx[j], "Exam")
+		exam1 := strings.HasPrefix(IPx[j], "Exam")
+		field1 := strings.HasPrefix(IPx[j], "Field")
 
 		for k := 0; k < p; k++ {
 
-			//			exam2 := strings.HasPrefix(IPx[k], "Exam")
+			exam2 := strings.HasPrefix(IPx[k], "Exam")
+			field2 := strings.HasPrefix(IPx[k], "Field")
 
 			switch {
 			case j == k:
-				trans[j][k] = 100
-
+				trans[j][k] = 50
+			case rfid.RoomCode(k) == rfid.Lensometer:
+				// Patients can't be in the lensometer room
+				trans[j][k] = 0
+			case rfid.RoomCode(k) == rfid.Checkout:
+				// Can't return to checkout
+				trans[j][k] = 0
+			case rfid.RoomCode(j) == rfid.CheckoutReturn:
+				// Can't leave CheckoutReturn (absorbing state)
+				trans[j][k] = 0
+			case exam1 && exam2:
+				// Patients can't move directly between exam rooms
+				trans[j][k] = 0
+			case field1 && field2:
+				// Patients can't move directly between visual field rooms
+				trans[j][k] = 0
 			default:
 				trans[j][k] = 1
 			}
 		}
-	}
-
-	// Can never go back to checkout
-	for j := 0; j < p; j++ {
-		if j != int(rfid.Checkout) {
-			trans[j][rfid.Checkout] = 0
-		}
-	}
-
-	// Can never leave CheckoutReturn
-	for j := 0; j < p; j++ {
-		if j != int(rfid.CheckoutReturn) {
-			trans[rfid.CheckoutReturn][j] = 0
-		}
-	}
-
-	// Make it easier to go to CheckoutReturn
-	for j := 0; j < p; j++ {
-		// TODO needs adjusting
-		trans[j][rfid.CheckoutReturn] = 20
 	}
 
 	normalize(trans)
@@ -138,6 +147,7 @@ func makeTrans() [][]float64 {
 	return trans
 }
 
+// alloc constructs a m x n rectangular array of float64 arrays.
 func alloc(m, n int) [][]float64 {
 
 	mat := make([][]float64, m)
@@ -148,7 +158,7 @@ func alloc(m, n int) [][]float64 {
 	return mat
 }
 
-// makeEmission constucts the emissin probabiity matrix for the HMM.
+// makeEmission constucts the emission probability matrix for the HMM.
 func makeEmission() [][]float64 {
 
 	p := len(IPx)
@@ -177,20 +187,11 @@ func makeEmission() [][]float64 {
 	return emis
 }
 
-type Locx []*rfid.Location
+type locsort []*rfid.Location
 
-func (a Locx) Len() int      { return len(a) }
-func (a Locx) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a Locx) Less(i, j int) bool {
-
-	if a[i].TagId < a[j].TagId {
-		return true
-	}
-
-	if a[i].TagId > a[j].TagId {
-		return false
-	}
-	// below here the tag id's are equal
+func (a locsort) Len() int      { return len(a) }
+func (a locsort) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a locsort) Less(i, j int) bool {
 
 	if a[i].CSN < a[j].CSN {
 		return true
@@ -200,6 +201,15 @@ func (a Locx) Less(i, j int) bool {
 		return false
 	}
 	// below here the CSN's are equal
+
+	if a[i].TagId < a[j].TagId {
+		return true
+	}
+
+	if a[i].TagId > a[j].TagId {
+		return false
+	}
+	// below here the tag id's are equal
 
 	return a[i].TimeStamp.Before(a[j].TimeStamp)
 }
@@ -247,6 +257,24 @@ func continuize(locs []*rfid.Location) []*rfid.Location {
 	return locx
 }
 
+// makeStart generates the starting probability distribution for the HMM.
+func makeStart(patient bool) []float64 {
+
+	start := make([]float64, len(IPx))
+	for i := range start {
+		start[i] = 1
+	}
+
+	if patient {
+		// Rooms where patients cannot go.
+		start[rfid.Lensometer] = 0
+	}
+
+	floats.Scale(1/floats.Sum(start), start)
+
+	return start
+}
+
 // process uses the HMM to smooth locations for one tag/CSN for one day.
 func process(locs []*rfid.Location) []*rfid.Location {
 
@@ -256,12 +284,7 @@ func process(locs []*rfid.Location) []*rfid.Location {
 	hmm.SetTransmission(trans)
 	hmm.SetEmission(emis)
 
-	start := make([]float64, len(IPx))
-	u := 1 / float64(len(IPx))
-	for i := range start {
-		start[i] = u
-	}
-	hmm.SetStart(start)
+	hmm.SetStart(makeStart(true))
 
 	loci := make([]int, len(locs))
 	for i, r := range locs {
@@ -272,7 +295,7 @@ func process(locs []*rfid.Location) []*rfid.Location {
 	hmm.Fit()
 
 	for i, r := range locs {
-		r.IPhmm = rfid.RoomCode(argmax(hmm.PostProb[i]))
+		r.IPhmm = rfid.RoomCode(hmm.Pred[i])
 	}
 
 	return locs
@@ -332,9 +355,9 @@ func main() {
 	setup()
 
 	locs = readlocs()
-	sort.Sort(Locx(locs))
+	sort.Sort(locsort(locs))
 
-	trans = makeTrans()
+	trans = makeTrans(true)
 	emis = makeEmission()
 
 	rlocs := run(locs)

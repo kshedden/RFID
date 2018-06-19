@@ -93,17 +93,29 @@ func doFile(pa, fname string) {
 
 		cr := new(rfid.ClarityRecord)
 
+		// Parse the CSN
 		cr.CSN, err = strconv.ParseUint(rec[cinf.CSN], 10, 64)
 		if err != nil {
 			panic(err)
 		}
 
+		// Parse the check in time
 		if len(rec[cinf.CheckInTime]) == 0 {
 			continue
 		}
 		cr.CheckInTime, err = time.Parse("2006-Jan-02 15:04:05", rec[cinf.CheckInTime])
 		if err != nil {
 			print(rec[cinf.CheckInTime] + "\n")
+			panic(err)
+		}
+
+		// Parse the check out time
+		if len(rec[cinf.CheckOutTime]) == 0 {
+			continue
+		}
+		cr.CheckOutTime, err = time.Parse("2006-Jan-02 15:04:05", rec[cinf.CheckOutTime])
+		if err != nil {
+			print(rec[cinf.CheckOutTime] + "\n")
 			panic(err)
 		}
 

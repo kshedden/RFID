@@ -87,7 +87,7 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 
 		if r.PersonCat == rfid.Patient {
 
-			// For patients, check if the CSN is in the Clarity data
+			// Check if the CSN is in the Clarity data
 			ii := sort.Search(len(clarity), func(i int) bool { return r.CSN <= clarity[i].CSN })
 			if ii == len(clarity) || clarity[ii].CSN != r.CSN {
 				rfi.NoClarity++
@@ -104,14 +104,20 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 				continue
 			}
 
-			// Keep a reference to the Clarity record
-			r.Clarity = clarity[ii]
-
-			// For patients, check if the time is prior to the Clarity check-in time
+			// Check if the time is prior to the Clarity check-in time
 			if r.TimeStamp.Before(clarity[ii].CheckInTime) {
-				rfi.BeforeCheckin++
+				rfi.BeforeCheckIn++
 				continue
 			}
+
+			// Check if the time is prior to the Clarity check-in time
+			if r.TimeStamp.After(clarity[ii].CheckOutTime) {
+				rfi.AfterCheckOut++
+				continue
+			}
+
+			// Keep a reference to the Clarity record
+			r.Clarity = clarity[ii]
 		}
 
 		recs = append(recs, r)
