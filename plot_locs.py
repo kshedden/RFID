@@ -55,7 +55,7 @@ iyv = []
 for day, f in df.groupby("Day"):
 
     print(day)
-    f = f.loc[f.Person == "Patient", :]
+    f = f.loc[f.Person == "Provider", :]
 
     if f.shape[0] < 100:
         continue

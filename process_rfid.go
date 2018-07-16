@@ -29,7 +29,7 @@ func (a byTime) Len() int           { return len(a) }
 func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].TimeStamp.Before(a[j].TimeStamp) }
 
-func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
+func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord, []*rfid.RFIDrecord) {
 
 	fname := fmt.Sprintf("%4d-%02d-%02d_APD.csv.gz", year, month, day)
 	fname = path.Join("/", "home", "kshedden", "RFID", "data", "APD", fname)
@@ -37,7 +37,7 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 	// If the file does not exist, return silently
 	if _, err := os.Stat(fname); err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
 	}
 	logger.Print(fmt.Sprintf("Processing file '%s'", fname))
@@ -55,7 +55,7 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 	rdr := csv.NewReader(gid)
 	rdr.ReuseRecord = true
 
-	var recs []*rfid.RFIDrecord
+	var patrecs, provrecs []*rfid.RFIDrecord
 	var n int
 	var rfi rfid.RFIDinfo
 	var nerr int
@@ -85,7 +85,9 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 			continue
 		}
 
-		if r.PersonCat == rfid.Patient {
+		switch r.PersonCat {
+
+		case rfid.Patient:
 
 			// Check if the CSN is in the Clarity data
 			ii := sort.Search(len(clarity), func(i int) bool { return r.CSN <= clarity[i].CSN })
@@ -118,9 +120,15 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 
 			// Keep a reference to the Clarity record
 			r.Clarity = clarity[ii]
-		}
 
-		recs = append(recs, r)
+			patrecs = append(patrecs, r)
+
+		case rfid.Provider:
+			provrecs = append(provrecs, r)
+
+		default:
+			panic("Unkown person type\n")
+		}
 	}
 
 	if nerr > 0 {
@@ -129,15 +137,17 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord) {
 	logger.Printf("%d errors parsing csv file", nerr)
 
 	// Confirm that it is sorted by time
-	sort.Sort(byTime(recs))
+	sort.Sort(byTime(provrecs))
+	sort.Sort(byTime(patrecs))
 
-	recs = spantime(recs, &rfi)
+	provrecs = spantime(provrecs, &rfi)
+	patrecs = spantime(patrecs, &rfi)
 
 	rfi.FileName = fname
 	rfi.TotalRecs = n
-	rfi.FinalRecs = len(recs)
+	rfi.FinalRecs = len(provrecs) + len(patrecs)
 
-	return &rfi, recs
+	return &rfi, patrecs, provrecs
 }
 
 // spantime removes records from a given IP source if there have
@@ -216,30 +226,46 @@ func main() {
 
 	readClarity()
 
-	fid, err := os.Create("locations.gob.gz")
-	if err != nil {
-		panic(err)
-	}
-	defer fid.Close()
-	gid := gzip.NewWriter(fid)
-	defer gid.Close()
+	// Setup encoders for patients and providers
+	var enc [2]*gob.Encoder
+	for j := 0; j < 2; j++ {
+		fname := "patient_locations.gob.gz"
+		if j == 1 {
+			fname = "provider_locations.gob.gz"
+		}
+		f, err := os.Create(fname)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		g := gzip.NewWriter(f)
+		defer g.Close()
 
-	enc := gob.NewEncoder(gid)
+		enc[j] = gob.NewEncoder(g)
+	}
 
 	for year := 2018; year <= 2018; year++ {
 		for month := 1; month <= 12; month++ {
 			for day := 1; day <= 31; day++ {
 
-				rif, recs := readDay(year, month, day)
-				fmt.Printf("%d-%d-%d %d\n", year, month, day, len(recs))
+				rif, patrecs, provrecs := readDay(year, month, day)
+				fmt.Printf("%d-%d-%d %d %d\n", year, month, day, len(provrecs), len(patrecs))
 
 				// Should do something with this
 				_ = rif
 
-				locs := rfid.GetLocation(recs)
+				patlocs := rfid.GetLocation(patrecs)
+				provlocs := rfid.GetLocation(provrecs)
 
-				for _, loc := range locs {
-					err := enc.Encode(loc)
+				for _, loc := range patlocs {
+					err := enc[0].Encode(loc)
+					if err != nil {
+						panic(err)
+					}
+				}
+
+				for _, loc := range provlocs {
+					err := enc[1].Encode(loc)
 					if err != nil {
 						panic(err)
 					}

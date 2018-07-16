@@ -30,6 +30,9 @@ var (
 
 	// PIx maps location codes to text location labels.
 	IPx map[int]string
+
+	// The input file name
+	infname string
 )
 
 // readLocs reads all the unsmoothed location records.
@@ -332,7 +335,12 @@ func run(locs []*rfid.Location) []*rfid.Location {
 // save stores the smoothed locations to a gob file.
 func save(locs []*rfid.Location) {
 
-	f, err := os.Create("locations_s.gob.gz")
+	if !strings.Contains(infname, ".gob.gz") {
+		panic("Invalid input file name\n")
+	}
+
+	fn := strings.Replace(infname, ".gob.gz", "_s.gob.gz", 1)
+	f, err := os.Create(fn)
 	if err != nil {
 		panic(err)
 	}
@@ -351,6 +359,8 @@ func save(locs []*rfid.Location) {
 }
 
 func main() {
+
+	infname = os.Args[1]
 
 	setup()
 

@@ -1,3 +1,7 @@
+/*
+Convert the locations gob file to csv format.
+*/
+
 package main
 
 import (
