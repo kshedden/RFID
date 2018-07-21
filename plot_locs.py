@@ -4,11 +4,25 @@ matplotlib.use('Agg')
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.font_manager import FontProperties
 from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 import matplotlib.dates as mdates
+from matplotlib.transforms import blended_transform_factory
 
-df = pd.read_csv("locations_s.csv.gz")
+provider = True
+
+if provider:
+    df = pd.read_csv("provider_locations_s.csv.gz")
+    idvar = "UMid"
+else:
+    df = pd.read_csv("patient_locations_s.csv.gz")
+    idvar = "CSN"
+
+font0 = FontProperties()
+font0.set_family("monospace")
+font0.set_size(9)
+
 df["Time"] = pd.to_datetime(df.Time)
 
 df["Day"] = df.Time.dt.dayofyear
@@ -55,22 +69,34 @@ iyv = []
 for day, f in df.groupby("Day"):
 
     print(day)
-    f = f.loc[f.Person == "Provider", :]
+
+    if f.Time.iloc[0].weekday() in (5, 6):
+    	continue
 
     if f.shape[0] < 100:
         continue
 
-    plt.clf()
+    # Vertical position on the plot
     iy = 0
+
+    plt.clf()
+
     vl = set([])
     plt.figure(figsize=(10, 6))
-    plt.axes([0.1, 0.1, 0.7, 0.8])
+    ax = plt.axes([0.1, 0.1, 0.7, 0.8])
+    trans = blended_transform_factory(ax.transAxes, ax.transData)
     handles = []
     labels = []
-    for csn, gx in f.groupby("CSN"):
+    for csn, gx in f.groupby(idvar):
 
         # DEBUG
         print(csn)
+
+        if provider:
+        	mn = f.Time.min()
+        	pt = gx.Provider.iloc[0]
+        	plt.text(-0.13, iy, pt, ha='left', color='grey',
+        		fontproperties=font0, transform=trans)
 
         for jr in 1, 2:
 

@@ -50,7 +50,8 @@ func main() {
 	outc := csv.NewWriter(outz)
 	defer outc.Flush()
 
-	fields := []string{"TagID", "Time", "CSN", "Room1", "Room2", "Person", "Provider", "Signal1", "Signal2", "Room_HMM"}
+	fields := []string{"TagID", "Time", "CSN", "Room1", "Room2", "Person", "Provider", "UMid",
+		"Signal1", "Signal2", "Room_HMM", "Match"}
 	outc.Write(fields)
 
 	room := make(map[rfid.RoomCode]string)
@@ -83,11 +84,18 @@ func main() {
 		}
 
 		fields = append(fields, rfid.ProvMap[r.ProviderCat])
+		fields = append(fields, fmt.Sprintf("%d", r.UMid))
 
 		fields = append(fields, fmt.Sprintf("%f", r.Signal))
 		fields = append(fields, fmt.Sprintf("%f", r.Signal2))
 
 		fields = append(fields, room[r.IPhmm])
+
+		if r.Match {
+			fields = append(fields, "T")
+		} else {
+			fields = append(fields, "F")
+		}
 
 		outc.Write(fields)
 	}

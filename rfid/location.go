@@ -40,8 +40,15 @@ type Location struct {
 	// The provider category holding the tag, if this is held by a provider
 	ProviderCat ProviderType
 
+	// The UM id of a provider, 0 if this is a person
+	UMid uint64
+
 	// The predicted location from an HMM
 	IPhmm RoomCode
+
+	// True if the provider is in a room with a patient, or if a patient is
+	// in a room with a provider.
+	Match bool
 }
 
 // GetLocation returns an array of location predictions corresponding to the provided RFID records.
@@ -143,6 +150,7 @@ func processMinute(recs []*RFIDrecord) []*Location {
 			IP2:         Null,
 			PersonCat:   ctx[tagid].PersonCat,
 			ProviderCat: ctx[tagid].ProviderCat,
+			UMid:        ctx[tagid].UMid,
 		}
 
 		// If there is a second-best match, include it too

@@ -18,6 +18,13 @@ import (
 	"github.com/kshedden/rfid/rfid"
 )
 
+type personType int
+
+const (
+	provider personType = iota
+	patient
+)
+
 var (
 	// The locations
 	locs []*rfid.Location
@@ -38,7 +45,7 @@ var (
 // readLocs reads all the unsmoothed location records.
 func readlocs() []*rfid.Location {
 
-	fid, err := os.Open("locations.gob.gz")
+	fid, err := os.Open(infname)
 	if err != nil {
 		panic(err)
 	}
@@ -96,13 +103,16 @@ func normalize(mat [][]float64) {
 }
 
 // makeTrans constructs the probability transition matrix for the HMM.
-func makeTrans(patient bool) [][]float64 {
+func makeTrans(person personType) [][]float64 {
 
-	if patient {
+	switch person {
+	case patient:
 		return makeTransPatient()
+	case provider:
+		return makeTransProvider()
+	default:
+		panic("Unkown person type")
 	}
-
-	panic("makeTransProvider is not implemented yet\n")
 }
 
 // makeTransPatient constructsthe probability transition matrix for a patient.
@@ -150,6 +160,28 @@ func makeTransPatient() [][]float64 {
 	return trans
 }
 
+// makeTransPatient constructs the probability transition matrix for a patient.
+func makeTransProvider() [][]float64 {
+
+	p := len(rfid.IPcode)
+	trans := alloc(p, p)
+
+	for j := 0; j < p; j++ {
+		for k := 0; k < p; k++ {
+			switch {
+			case j == k:
+				trans[j][j] = 50
+			default:
+				trans[j][k] = 1
+			}
+		}
+	}
+
+	normalize(trans)
+
+	return trans
+}
+
 // alloc constructs a m x n rectangular array of float64 arrays.
 func alloc(m, n int) [][]float64 {
 
@@ -161,8 +193,21 @@ func alloc(m, n int) [][]float64 {
 	return mat
 }
 
-// makeEmission constucts the emission probability matrix for the HMM.
-func makeEmission() [][]float64 {
+// makeEmission returns an emission probability matrix for each person type.
+func makeEmission(person personType) [][]float64 {
+
+	switch person {
+	case patient:
+		return makeEmissionPatient()
+	case provider:
+		return makeEmissionProvider()
+	default:
+		panic("invalid person type\n")
+	}
+}
+
+// makeEmissionPatient constucts the emission probability matrix for the HMM for a patient.
+func makeEmissionPatient() [][]float64 {
 
 	p := len(IPx)
 	emis := alloc(p, p)
@@ -184,6 +229,27 @@ func makeEmission() [][]float64 {
 	emis[rfid.Checkout][rfid.CheckoutReturn] = 2.5
 	emis[rfid.CheckoutReturn][rfid.Checkout] = 2.5
 	emis[rfid.Checkout][rfid.Checkout] = 2.5
+
+	normalize(emis)
+
+	return emis
+}
+
+// makeEmissionProvider constucts the emission probability matrix for the HMM for a patient.
+func makeEmissionProvider() [][]float64 {
+
+	p := len(IPx)
+	emis := alloc(p, p)
+
+	for j := 0; j < p; j++ {
+		for k := 0; k < p; k++ {
+			if j == k {
+				emis[j][k] = 5
+			} else {
+				emis[j][k] = 1
+			}
+		}
+	}
 
 	normalize(emis)
 
@@ -339,6 +405,10 @@ func save(locs []*rfid.Location) {
 		panic("Invalid input file name\n")
 	}
 
+	if strings.Contains(infname, "_s.gob.gz") {
+		panic("Input data are already smoothed")
+	}
+
 	fn := strings.Replace(infname, ".gob.gz", "_s.gob.gz", 1)
 	f, err := os.Create(fn)
 	if err != nil {
@@ -362,13 +432,22 @@ func main() {
 
 	infname = os.Args[1]
 
+	var person personType
+	if strings.Contains(strings.ToLower(infname), "provider") {
+		person = provider
+	} else if strings.Contains(strings.ToLower(infname), "patient") {
+		person = patient
+	} else {
+		panic("Invalid person type\n")
+	}
+
 	setup()
 
 	locs = readlocs()
 	sort.Sort(locsort(locs))
 
-	trans = makeTrans(true)
-	emis = makeEmission()
+	trans = makeTrans(person)
+	emis = makeEmission(person)
 
 	rlocs := run(locs)
 	save(rlocs)
