@@ -112,7 +112,7 @@ func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord, []*rfid.
 				continue
 			}
 
-			// Check if the time is prior to the Clarity check-in time
+			// Check if the time is after the Clarity check-out time
 			if r.TimeStamp.After(clarity[ii].CheckOutTime) {
 				rfi.AfterCheckOut++
 				continue

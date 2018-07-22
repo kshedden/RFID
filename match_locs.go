@@ -1,6 +1,5 @@
 /*
-match_locs searches for a provider in the room at the same time
-for each patient, by minute.
+match_locs assesses for each patient minute whether a provider is present.
 */
 
 package main
@@ -16,23 +15,28 @@ import (
 )
 
 var (
+	// Location records for providers
 	providers []*rfid.Location
 
+	// Location records for patients
 	patients []*rfid.Location
 )
 
+// Enable sorting of locations by time
 type byTime []*rfid.Location
 
 func (a byTime) Len() int           { return len(a) }
 func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].TimeStamp.Before(a[j].TimeStamp) }
 
+// Enable sorting of locations by CSN
 type byCSN []*rfid.Location
 
 func (a byCSN) Len() int           { return len(a) }
 func (a byCSN) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byCSN) Less(i, j int) bool { return a[i].CSN < a[j].CSN }
 
+// load reads an array of location records from a gzipped gob file.
 func load(fname string) []*rfid.Location {
 
 	f, err := os.Open(fname)
@@ -65,6 +69,7 @@ func load(fname string) []*rfid.Location {
 	return rec
 }
 
+// save writes an array of location records to a gzipped gob file.
 func save(fname string, recs []*rfid.Location) {
 
 	f, err := os.Create(fname)
@@ -107,6 +112,7 @@ func search() {
 		for k := ii; k < len(providers) && providers[k].TimeStamp.Equal(pat.TimeStamp); k++ {
 			if pat.IPhmm == providers[k].IPhmm {
 				pat.Match = true
+				providers[k].Match = true
 				break
 			}
 		}
