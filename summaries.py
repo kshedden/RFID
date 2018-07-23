@@ -68,10 +68,18 @@ a = prov.groupby("Provider").agg({"Match": lambda x : 100 * np.mean(x)})
 out.write("Patient-in-room percentage, by provider type:\n")
 out.write(a.to_string(float_format="%.1f") + "\n\n")
 
-# Distribution of minutes per room, for providers
-a = prov.groupby("Room_HMM").agg({"Match": lambda x: 100 * np.mean(x)})
+# Percentage of time that a provider is in the room, by room
+a = pat.groupby("Room_HMM").agg({"Match": lambda x: 100 * np.mean(x)})
 a = pd.DataFrame(a)
 out.write("Provider-in-room percentage, by room:\n%s\n\n" % a.to_string(float_format="%.1f"))
+
+# Percentage of time that each provider type is in the room, by room
+provx = prov.loc[prov.Match==1, :]
+a = provx.groupby(["Room_HMM", "Provider"]).size()
+a = a.unstack()
+a = a.fillna(0)
+a = 100 * a.apply(lambda x: x / x.sum(), axis=1)
+out.write("Distribution of provider types when seeing patients, by room:\n%s\n\n" % a.to_string(float_format="%.1f"))
 
 out.write("```\n")
 out.close()

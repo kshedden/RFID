@@ -62,7 +62,10 @@ colors = {"Exam1": clr[0],
           "NoSignal": clr[8],
           "CheckoutReturn": clr[5]}
 
-pdf = PdfPages("locs.pdf")
+if provider:
+    pdf = PdfPages("provider_locs.pdf")
+else:
+    pdf = PdfPages("patient_locs.pdf")
 
 iyv = []
 
@@ -188,7 +191,7 @@ for day, f in df.groupby("Day"):
     pdf.savefig()
 
     #DEBUG
-    if day >= 20:
+    if day >= 30:
         break
 
 pdf.close()
