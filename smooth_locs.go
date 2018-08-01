@@ -40,7 +40,12 @@ var (
 
 	// The input file name
 	infname string
+
+	// Extract the field that identifies a distinct person.
+	personID personSelector
 )
+
+type personSelector func(*rfid.Location) uint64
 
 // readLocs reads all the unsmoothed location records.
 func readlocs() []*rfid.Location {
@@ -75,13 +80,13 @@ func readlocs() []*rfid.Location {
 
 func setup() {
 
-	IPcoder := make(map[int]string)
+	IPcodeRev := make(map[int]string)
 	for k, v := range rfid.IPcode {
-		IPcoder[int(v)] = k
+		IPcodeRev[int(v)] = k
 	}
 
 	IPx = make(map[int]string)
-	for k, v := range IPcoder {
+	for k, v := range IPcodeRev {
 		IPx[k] = rfid.IPmap[v]
 	}
 }
@@ -121,6 +126,8 @@ func makeTransPatient() [][]float64 {
 	p := len(rfid.IPcode)
 	trans := alloc(p, p)
 
+	stick := 50.0
+
 	for j := 0; j < p; j++ {
 
 		exam1 := strings.HasPrefix(IPx[j], "Exam")
@@ -130,18 +137,20 @@ func makeTransPatient() [][]float64 {
 
 			exam2 := strings.HasPrefix(IPx[k], "Exam")
 			field2 := strings.HasPrefix(IPx[k], "Field")
+			checkin2 := strings.HasPrefix(IPx[k], "Checkin")
+			checkoutfinal2 := strings.HasPrefix(IPx[k], "CheckoutFinal")
 
 			switch {
 			case j == k:
-				trans[j][k] = 50
+				trans[j][k] = stick
 			case rfid.RoomCode(k) == rfid.Lensometer:
 				// Patients can't be in the lensometer room
 				trans[j][k] = 0
 			case rfid.RoomCode(k) == rfid.Checkout:
 				// Can't return to checkout
 				trans[j][k] = 0
-			case rfid.RoomCode(j) == rfid.CheckoutReturn:
-				// Can't leave CheckoutReturn (absorbing state)
+			case rfid.RoomCode(j) == rfid.CheckoutFinal:
+				// Can't leave CheckoutFinal (absorbing state)
 				trans[j][k] = 0
 			case exam1 && exam2:
 				// Patients can't move directly between exam rooms
@@ -149,6 +158,12 @@ func makeTransPatient() [][]float64 {
 			case field1 && field2:
 				// Patients can't move directly between visual field rooms
 				trans[j][k] = 0
+			case checkin2:
+				// Patient's can't return to checkin
+				trans[j][k] = 0
+			case checkoutfinal2:
+				// Make it easy to go to the absorbing checkout state
+				trans[j][k] = stick / 5
 			default:
 				trans[j][k] = 1
 			}
@@ -160,17 +175,19 @@ func makeTransPatient() [][]float64 {
 	return trans
 }
 
-// makeTransPatient constructs the probability transition matrix for a patient.
+// makeTransProvider constructs the probability transition matrix for a provider.
 func makeTransProvider() [][]float64 {
 
 	p := len(rfid.IPcode)
 	trans := alloc(p, p)
 
+	stick := 10.0
+
 	for j := 0; j < p; j++ {
 		for k := 0; k < p; k++ {
 			switch {
 			case j == k:
-				trans[j][j] = 50
+				trans[j][j] = stick
 			default:
 				trans[j][k] = 1
 			}
@@ -206,29 +223,44 @@ func makeEmission(person personType) [][]float64 {
 	}
 }
 
+// makeExchEmis makes two states in an emission matrix exchangeable.
+func makeExchEmis(emis [][]float64, i1, i2 rfid.RoomCode, r float64) [][]float64 {
+
+	emis[i1][i1] = r
+	emis[i1][i2] = r
+	emis[i2][i1] = r
+	emis[i2][i2] = r
+
+	return emis
+}
+
 // makeEmissionPatient constucts the emission probability matrix for the HMM for a patient.
 func makeEmissionPatient() [][]float64 {
 
 	p := len(IPx)
 	emis := alloc(p, p)
 
+	// Ratio of the probability that the observed room is the actual room to the probability that the
+	// obvserved room is not the actual room.
+	same := 10.0
+
 	for j := 0; j < p; j++ {
 		for k := 0; k < p; k++ {
 
 			switch {
 			case j == k:
-				emis[j][k] = 5
+				emis[j][k] = same
 			default:
 				emis[j][k] = 1
 			}
 		}
 	}
 
-	// Checkout and CheckoutReturn are exchangeable
-	emis[rfid.Checkout][rfid.Checkout] = 2.5
-	emis[rfid.Checkout][rfid.CheckoutReturn] = 2.5
-	emis[rfid.CheckoutReturn][rfid.Checkout] = 2.5
-	emis[rfid.Checkout][rfid.Checkout] = 2.5
+	// Checkout and CheckoutFinal are exchangeable
+	emis = makeExchEmis(emis, rfid.Checkout, rfid.CheckoutFinal, same/2)
+
+	// Checkin and NoSignal are exchangeable
+	emis = makeExchEmis(emis, rfid.Checkin, rfid.NoSignal, same/2)
 
 	normalize(emis)
 
@@ -241,10 +273,12 @@ func makeEmissionProvider() [][]float64 {
 	p := len(IPx)
 	emis := alloc(p, p)
 
+	same := 10.0
+
 	for j := 0; j < p; j++ {
 		for k := 0; k < p; k++ {
 			if j == k {
-				emis[j][k] = 5
+				emis[j][k] = same
 			} else {
 				emis[j][k] = 1
 			}
@@ -258,18 +292,19 @@ func makeEmissionProvider() [][]float64 {
 
 type locsort []*rfid.Location
 
+// Sort location records by person id, tag id, and timestamp.
 func (a locsort) Len() int      { return len(a) }
 func (a locsort) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
 func (a locsort) Less(i, j int) bool {
 
-	if a[i].CSN < a[j].CSN {
+	if personID(a[i]) < personID(a[j]) {
 		return true
 	}
 
-	if a[i].CSN > a[j].CSN {
+	if personID(a[i]) > personID(a[j]) {
 		return false
 	}
-	// below here the CSN's are equal
+	// below here the ID's are equal
 
 	if a[i].TagId < a[j].TagId {
 		return true
@@ -281,21 +316,6 @@ func (a locsort) Less(i, j int) bool {
 	// below here the tag id's are equal
 
 	return a[i].TimeStamp.Before(a[j].TimeStamp)
-}
-
-func argmax(x []float64) int {
-
-	i := 0
-	v := x[0]
-
-	for j := 1; j < len(x); j++ {
-		if x[j] > v {
-			i = j
-			v = x[j]
-		}
-	}
-
-	return i
 }
 
 // continuize fills in the gaps where no signal was detected for a tag
@@ -337,14 +357,18 @@ func makeStart(patient bool) []float64 {
 	if patient {
 		// Rooms where patients cannot go.
 		start[rfid.Lensometer] = 0
+
+		// Prefer to start patients at checkin
+		start[rfid.Checkin] = 10
 	}
 
+	// Normalize
 	floats.Scale(1/floats.Sum(start), start)
 
 	return start
 }
 
-// process uses the HMM to smooth locations for one tag/CSN for one day.
+// process uses the HMM to smooth locations for one person/tag/day.
 func process(locs []*rfid.Location) []*rfid.Location {
 
 	locs = continuize(locs)
@@ -380,7 +404,7 @@ func run(locs []*rfid.Location) []*rfid.Location {
 		j := i + 1
 		for j < len(locs) {
 
-			if locs[i].TagId != locs[j].TagId || locs[i].CSN != locs[j].CSN {
+			if locs[i].TagId != locs[j].TagId || personID(locs[i]) != personID(locs[j]) {
 				break
 			}
 
@@ -428,6 +452,16 @@ func save(locs []*rfid.Location) {
 	}
 }
 
+// Use UMid to identify providers
+func providerID(r *rfid.Location) uint64 {
+	return r.UMid
+}
+
+// Use CSN to identify patients
+func patientID(r *rfid.Location) uint64 {
+	return r.CSN
+}
+
 func main() {
 
 	infname = os.Args[1]
@@ -435,8 +469,10 @@ func main() {
 	var person personType
 	if strings.Contains(strings.ToLower(infname), "provider") {
 		person = provider
+		personID = providerID
 	} else if strings.Contains(strings.ToLower(infname), "patient") {
 		person = patient
+		personID = patientID
 	} else {
 		panic("Invalid person type\n")
 	}

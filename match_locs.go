@@ -1,5 +1,6 @@
 /*
-match_locs assesses for each patient minute whether a provider is present.
+match_locs assesses for each patient minute whether a provider is present,
+and for each provider whether a patient is present.
 */
 
 package main
