@@ -29,6 +29,9 @@ func (a byTime) Len() int           { return len(a) }
 func (a byTime) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a byTime) Less(i, j int) bool { return a[i].TimeStamp.Before(a[j].TimeStamp) }
 
+// readDay reads all records for a single day, and returns an RFIDinfo describing the
+// selections, and two RFIDrecord arrays, containing RFIDrecord structs for patients
+// and for providers respectively.
 func readDay(year, month, day int) (*rfid.RFIDinfo, []*rfid.RFIDrecord, []*rfid.RFIDrecord) {
 
 	fname := fmt.Sprintf("%4d-%02d-%02d_APD.csv.gz", year, month, day)

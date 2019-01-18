@@ -2,7 +2,7 @@ patient_locations.gob.gz:
 	go run process_rfid.go
 
 provider_locations.gob.gz:
-	go run process_rfid.fo
+	go run process_rfid.go
 
 patient_locations_s.gob.gz: patient_locations.gob.gz
 	go run smooth_locs.go patient_locations.gob.gz
